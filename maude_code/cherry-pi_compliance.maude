@@ -1,0 +1,196 @@
+fmod CHERRY-TYPES-SYNTAX is  
+  inc QID .
+  
+  sorts Sort Type Label TypeVar TypeLab CkpType Configuration .
+  sorts BrnEl BrnSet .
+  
+  subsorts Qid < TypeVar < Type .  
+  subsorts Qid < TypeLab .
+  subsorts BrnEl < BrnSet .
+  
+
+  *** Sorts  
+  ops bool int str : -> Sort .
+
+  *** Syntax of session types
+  op end : -> Type [ctor] .                                                 --- end
+  op roll : -> Type [ctor] .                                                   --- roll
+  op abt : -> Type [ctor] .                                                  --- abort
+  op cmt._ : Type -> Type [frozen prec 25] .                     --- commit      
+  op ![_]._ : Sort Type -> Type [frozen prec 25] .              --- output
+  op ?[_]._ : Sort Type -> Type [frozen prec 25] .             --- input
+  op sel[_]._ : TypeLab Type -> Type [frozen prec 25] .   --- selection
+  op brn[_] : BrnSet -> Type [frozen prec 25] .                 --- branching
+  op _(+)_ : Type Type -> Type [frozen prec 25] .            --- choice
+  op mu_._ : TypeVar Type -> Type [frozen prec 25] .     --- recursion 
+  
+  *** Branching arguments
+  op _;_ : BrnSet BrnSet -> BrnSet [ctor assoc comm] .
+  op brnEl : TypeLab Type -> BrnEl [frozen] . 
+
+  *** Type configurations
+  op ckp : Type -> CkpType [frozen] .     --- non-imposed checkpoint                
+  op ickp : Type -> CkpType [frozen] .   --- imposed checkpoint                    
+  op init(_,_)_>_||_>_ : Type Type CkpType Type CkpType Type -> Configuration [frozen prec 30] .  
+  
+  *** Transition labels
+  op ![_] : Sort -> Label .
+  op ?[_] : Sort -> Label .
+  op sel[_] : TypeLab -> Label . 
+  op brn[_] : TypeLab -> Label .   
+  op tau : -> Label .  
+  op cmtL : -> Label .  
+  op rollL : -> Label .  
+  op abtL : -> Label .  
+endfm
+
+
+
+
+
+
+mod CHERRY-TYPES-SEMANTICS is
+  protecting CHERRY-TYPES-SYNTAX .
+  
+  sort LabType .
+  subsort Type < LabType .
+  
+  var S : Sort .
+  var L : Label . 
+  var TL : TypeLab . 
+  var BS BS' : BrnSet .
+  var TV TV1 TV2 : TypeVar . 
+  vars T T' T1 T2 T1' T2' U U1 U2 : Type .
+  vars CT CT1 CT2 CT1' CT2' : CkpType .
+  
+  *** Type variable substitution (for recursion) 
+  op subst : Type TypeVar Type -> Type .
+  eq subst(end, TV, T) = end .
+  eq subst(TV, TV, T) = T .  
+  eq subst(![S] . T1, TV, T2) = ![S] . subst(T1, TV, T2) . 
+  eq subst(?[S] . T1, TV, T2) = ?[S] . subst(T1, TV, T2) .   
+  ceq subst(mu TV1 . T1, TV2, T2) = mu TV1 . subst(T1, TV2, T2) if TV1 =/= TV2 .   
+  ceq subst(mu TV1 . T1, TV2, T2) = mu TV1 . T1 if TV1 == TV2 .   
+  
+
+  *** Labelled transitions: {L}T means that a type performed the label L and became T in doing so
+  op {_}_ : Label LabType -> LabType [frozen] . 
+     
+
+  *** Semantic rules of types
+  rl [tsSend] : ![S] . T => {![S]}T .  
+  
+  rl [tsRcv] : ?[S] . T => {?[S]}T .  
+  
+  rl [tsSel] : sel[TL] . T => {sel[TL]}T .  
+  
+  crl [tsBr] : brn[BS] => {brn[TL]}T if brnEl(TL, T) ; BS' := BS .    
+  
+  rl [tsCmt] : cmt. T => {cmtL}T .  
+  
+  rl [tsRll] : roll => {rollL}end .  
+  
+  rl [tsAbt] : abt => {abtL}end .  
+  
+  rl [tsIf1] : T1 (+) T2 => {tau}T1 .    
+  
+  rl [tsIf2] : T1 (+) T2 => {tau}T2 .    
+
+  crl [tsRec] : mu TV . T => {L}T' if subst(T, TV, mu TV . T) => {L}T' .
+
+
+  *** Semantic rules of type configurations
+  crl [tsCom1] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') CT1 > T1' || CT2 > T2'
+                      if T1 => {![S]}T1' /\ T2 => {?[S]}T2' .
+
+  crl [tsCom2] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') CT1 > T1' || CT2 > T2'
+                      if T1 => {?[S]}T1' /\ T2 => {![S]}T2' .
+                      
+  crl [tsTau1] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') CT1 > T1' || CT2 > T2
+                      if T1 => {tau}T1' .
+                      
+  crl [tsTau2] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') CT1 > T1 || CT2 > T2'
+                      if T2 => {tau}T2' .                        
+
+  crl [tsLab1] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') CT1 > T1' || CT2 > T2'
+                      if T1 => {sel[TL]}T1' /\ T2 => {brn[TL]}T2' .
+
+  crl [tsLab2] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') CT1 > T1' || CT2 > T2'
+                      if T1 => {brn[TL]}T1' /\ T2 => {sel[TL]}T2' .
+
+  crl [tsCmt1a] : init(T,T') CT1 > T1 || ckp(U) > T2 => init(T,T') ckp(T1') > T1' || ickp(T2) > T2
+                      if T1 => {cmtL}T1' /\ U =/= T2 .
+
+  crl [tsCmt1b] : init(T,T') CT1 > T1 || ickp(U) > T2 => init(T,T') ckp(T1') > T1' || ickp(T2) > T2
+                      if T1 => {cmtL}T1' .                      
+
+  crl [tsCmt1c] : init(T,T') ckp(U) > T1 || CT2 > T2 => init(T,T') ickp(T1) > T1 || ckp(T2') > T2'
+                      if T2 => {cmtL}T2' /\ U =/= T1 .
+
+  crl [tsCmt1d] : init(T,T') ickp(U) > T1 || CT2 > T2 => init(T,T') ickp(T1) > T1 || ckp(T2') > T2'
+                      if T2 => {cmtL}T2' .                      
+  
+  crl [tsCmt2a] : init(T,T') CT1 > T1 || ckp(T2) > T2 => init(T,T') ckp(T1') > T1' || ckp(T2) > T2
+                      if T1 => {cmtL}T1' .
+  
+  crl [tsCmt2b] : init(T,T') ckp(T1) > T1 || CT2 > T2 => init(T,T') ckp(T1) > T1 || ckp(T2') > T2'
+                      if T2 => {cmtL}T2' .
+
+  crl [tsRll1a] : init(T,T') ckp(U1) > T1 || ckp(U2) > T2 => init(T,T') ckp(U1) > U1 || ckp(U2) > U2
+                      if T1 => {rollL}T1' .
+
+  crl [tsRll2b] : init(T,T') ckp(U1) > T1 || ickp(U2) > T2 => init(T,T') ckp(U1) > U1 || ickp(U2) > U2
+                      if T1 => {rollL}T1' .
+
+  crl [tsRll1c] : init(T,T') ckp(U1) > T1 || ckp(U2) > T2 => init(T,T') ckp(U1) > U1 || ckp(U2) > U2
+                      if T2 => {rollL}T2' .
+
+  crl [tsRll2d] : init(T,T') ickp(U1) > T1 || ckp(U2) > T2 => init(T,T') ickp(U1) > U1 || ckp(U2) > U2
+                      if T2 => {rollL}T2' .
+
+  crl [tsAbt1a] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') ckp(T) > T || ckp(T') > T'
+                      if T1 => {abtL}T1' .
+
+  crl [tsAbt1b] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') ckp(T) > T || ckp(T') > T'
+                      if T2 => {abtL}T2' .  
+                      
+                      
+  *** Example 6 of the paper
+  ops Tuser Tuser' Tservice Tservice' Tservice'' : -> Type .
+  ops InitConfig InitConfig' InitConfig'' : -> Configuration .
+
+  eq Tuser = ![str]. ?[int]. cmt. ?[str]. ((sel['hd]. ?[str]. ((?[str]. end) (+) roll)) (+) (sel['sd]. ?[str]. ((?[str]. end) (+) abt))) .
+
+  eq Tservice = ?[str]. ![int]. ![str]. brn[brnEl('hd, cmt. ![str]. ![str]. end); brnEl('sd, cmt. ![str]. ![str]. end)] .
+  
+  eq InitConfig = init(Tuser,Tservice) ckp(Tuser) > Tuser || ckp(Tservice) > Tservice .
+  
+
+  eq Tservice' = ?[str]. ![int]. cmt. ![str]. brn[brnEl('hd, ![str]. ![str]. end); brnEl('sd, ![str]. ![str]. end)] .
+  
+  eq InitConfig' = init(Tuser,Tservice') ckp(Tuser) > Tuser || ckp(Tservice') > Tservice' .                        
+
+
+  eq Tuser' = ![str]. ?[int]. ?[str]. cmt. ((sel['hd]. ?[str]. ((?[str]. end) (+) roll)) (+) (sel['sd]. ?[str]. ((?[str]. end) (+) abt))) .
+  
+  eq Tservice'' = ?[str]. ![int]. ![str]. cmt. brn[brnEl('hd, ![str]. ![str]. end); brnEl('sd, ![str]. ![str]. end)] .  
+  
+  eq InitConfig'' = init(Tuser',Tservice'') ckp(Tuser') > Tuser' || ckp(Tservice'') > Tservice'' .                      
+endm
+
+
+
+
+
+*******************************************************************************************************
+*** Maude commands for the consistency checks on the three specifications of Example 6.
+***************************************************************************************************	***
+*** search InitConfig  =>! init(T:Type,T':Type) CT1:CkpType > T1:Type || CT2:CkpType > T2:Type such that T1 =/= end or T2 =/= end .
+
+*** search InitConfig'  =>! init(T:Type,T':Type) CT1:CkpType > T1:Type || CT2:CkpType > T2:Type such that T1 =/= end or T2 =/= end .
+
+*** search InitConfig'' =>! init(T:Type,T':Type) CT1:CkpType > T1:Type || CT2:CkpType > T2:Type such that T1 =/= end or T2 =/= end .
+
+
+
+
