@@ -13,16 +13,17 @@ fmod CHERRY-TYPES-SYNTAX is
   ops bool int str : -> Sort .
 
   *** Syntax of session types
-  op end : -> Type [ctor] .                                                 --- end
-  op roll : -> Type [ctor] .                                                   --- roll
-  op abt : -> Type [ctor] .                                                  --- abort
-  op cmt._ : Type -> Type [frozen prec 25] .                     --- commit      
-  op ![_]._ : Sort Type -> Type [frozen prec 25] .              --- output
-  op ?[_]._ : Sort Type -> Type [frozen prec 25] .             --- input
+  op end : -> Type [ctor] .                               --- end
+  op err : -> Type [ctor] .                               --- err
+  op roll : -> Type [ctor] .                              --- roll
+  op abt : -> Type [ctor] .                               --- abort
+  op cmt._ : Type -> Type [frozen prec 25] .              --- commit      
+  op ![_]._ : Sort Type -> Type [frozen prec 25] .        --- output
+  op ?[_]._ : Sort Type -> Type [frozen prec 25] .        --- input
   op sel[_]._ : TypeLab Type -> Type [frozen prec 25] .   --- selection
-  op brn[_] : BrnSet -> Type [frozen prec 25] .                 --- branching
-  op _(+)_ : Type Type -> Type [frozen prec 25] .            --- choice
-  op mu_._ : TypeVar Type -> Type [frozen prec 25] .     --- recursion 
+  op brn[_] : BrnSet -> Type [frozen prec 25] .           --- branching
+  op _(+)_ : Type Type -> Type [frozen prec 25] .         --- choice
+  op mu_._ : TypeVar Type -> Type [frozen prec 25] .      --- recursion 
   
   *** Branching arguments
   op _;_ : BrnSet BrnSet -> BrnSet [ctor assoc comm] .
@@ -30,7 +31,7 @@ fmod CHERRY-TYPES-SYNTAX is
 
   *** Type configurations
   op ckp : Type -> CkpType [frozen] .     --- non-imposed checkpoint                
-  op ickp : Type -> CkpType [frozen] .   --- imposed checkpoint                    
+  op ickp : Type -> CkpType [frozen] .    --- imposed checkpoint                    
   op init(_,_)_>_||_>_ : Type Type CkpType Type CkpType Type -> Configuration [frozen prec 30] .  
   
   *** Transition labels
@@ -146,6 +147,12 @@ mod CHERRY-TYPES-SEMANTICS is
                       if T2 => {rollL}T2' .
 
   crl [tsRll2d] : init(T,T') ickp(U1) > T1 || ckp(U2) > T2 => init(T,T') ickp(U1) > U1 || ckp(U2) > U2
+                      if T2 => {rollL}T2' .
+
+  crl [tsRll3a] : init(T,T') ickp(U1) > T1 || CT2 > T2 => init(T,T') ickp(U1) > err || CT2 > err
+                      if T1 => {rollL}T1' .
+
+  crl [tsRll3b] : init(T,T') CT1 > T1 || ickp(U2) > T2 => init(T,T') CT1 > err || ickp(U2) > err
                       if T2 => {rollL}T2' .
 
   crl [tsAbt1a] : init(T,T') CT1 > T1 || CT2 > T2 => init(T,T') ckp(T) > T || ckp(T') > T'
